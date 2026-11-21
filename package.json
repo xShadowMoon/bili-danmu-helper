@@ -1,0 +1,11 @@
+{
+  "name": "bili-danmu-helper",
+  "version": "1.0.0",
+  "description": "Auto danmaku for Bilibili Live: timed messages, thank-yous, keyword replies, break reminders.",
+  "type": "module",
+  "main": "index.mjs",
+  "engines": { "node": ">=22" },
+  "scripts": { "start": "node index.mjs", "login": "node index.mjs login", "test": "node --test tests/*.test.mjs" },
+  "optionalDependencies": { "qrcode": "^1.5.4" },
+  "license": "MIT"
+}
