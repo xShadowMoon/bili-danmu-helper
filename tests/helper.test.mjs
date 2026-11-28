@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
-import { splitDanmu, keyHit, songAskOf, createDanmuHelper, DEFAULTS } from '../src/danmu-helper.mjs';
+import { splitDanmu, keyHit, songAskOf, createDanmuHelper, DEFAULTS, cleanAiLine, saysNothing, mentions, aiPrompt, chatPrompt } from '../src/danmu-helper.mjs';
 import { livePacket, livePackets, createParser } from '../src/live-ws.mjs';
 import { signWbiWith, mixinKeyOf } from '../src/bili.mjs';
 
@@ -68,4 +68,37 @@ test('helper sends a thank-you through the queue', async t => {
   assert.equal(sent[0].msg, '谢谢小明～');
   assert.equal(sent[0].roomid, '123');
   assert.equal(sent[0].csrf, 'csrf');
+});
+
+test('AI line checks: strip quotes, drop too long or banned', () => {
+  assert.equal(cleanAiLine('「喝水啦」'), '喝水啦');
+  assert.equal(cleanAiLine('弹幕：喝水'), '喝水');
+  assert.equal(cleanAiLine('x'.repeat(21), 20), '');
+  assert.equal(cleanAiLine('加个微信'), '');
+  assert.ok(saysNothing('不说') && saysNothing('「不说」。') && !saysNothing('不说了，喝水'));
+  assert.ok(mentions('助手在吗', ['助手']) && !mentions('你好', ['助手']));
+  const [sys, user] = aiPrompt({ original: '喝水', persona: 'P', info: { title: 'T', liveMinutes: 75 }, recent: [{ uname: 'A', text: 'hi' }] });
+  assert.ok(sys.content.startsWith('P') && user.content.includes('T') && user.content.includes('1 小时 15 分钟') && user.content.includes('A：hi'));
+  assert.ok(chatPrompt({ recent: [] })[0].content.includes('不说'));
+});
+
+test('AI rewrite waits for confirmation, then sends what was approved', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dmh-ai-'));
+  const sent = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opt) => {
+    if (String(url).includes('chat/completions')) return { ok: true, json: async () => ({ choices: [{ message: { content: '主播喝口水吧' } }] }) };
+    if (String(url).includes('msg/send')) { sent.push(new URLSearchParams(opt.body).get('msg')); return { ok: true, json: async () => ({ code: 0, message: '' }) }; }
+    return { ok: true, json: async () => ({ data: {} }) };
+  };
+  try {
+    fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify({ enabled: true, account: 'bot', maxLen: 20, safety: { minGapSec: 0, maxPerStream: 9, pauseMinOnError: 1 },
+      timed: { enabled: true, onlyLive: true, intervalMin: 0.5, order: 'seq', lines: ['喝水小助手提醒主播该喝水了'] }, ai: { enabled: true, timed: true, confirm: true, confirmSec: 15 } }));
+    const h = createDanmuHelper({ dir, roomId: 1, isLive: () => true, liveSince: () => Date.now() - 3600e3, botCookie: () => 'bili_jct=x; DedeUserID=9', log: () => {}, UA: 'x', ai: { key: () => 'sk-test' } });
+    h.tick(); await new Promise(r => setTimeout(r, 50));
+    const p = h.status().pending;
+    assert.equal(p.text, '主播喝口水吧'); assert.equal(sent.length, 0);
+    await h.pendingAction(p.id, 'send'); await new Promise(r => setTimeout(r, 50));
+    assert.deepEqual(sent, ['主播喝口水吧']); assert.equal(h.status().pending, null);
+  } finally { globalThis.fetch = realFetch; fs.rmSync(dir, { recursive: true, force: true }); }
 });

@@ -11,6 +11,7 @@ B 站直播间自动发弹幕。它会监听直播间，用你的账号发消息
 - **关键词回复**，只回答提问（「群号是多少？」会回，「明天再进群聊」不回；关键词前面加 `=` 就总是回）
 - **「唱过 X 吗」**，用你自己的歌单回答
 - **开播 / 下播**时说一句话，还有**休息提醒**（「已经播了 2 小时啦」）
+- **可选 AI**（默认关）：定时弹幕和休息提醒到点让 AI 换个说法；也可以让 AI 看弹幕，自己判断要不要插一句。写好的先在本机小页面等你点「发送」，没点的话换说法发原句、插话不发
 - 默认就很稳：所有消息排一个队，两条之间有最短间隔，每场有上限，出错自动暂停，太长的文字自动拆开，写成 `说法1 || 说法2` 的话，B 站悄悄吞掉一条时会换下一种说法
 
 ## 需要
@@ -51,10 +52,17 @@ node index.mjs test 大家好        # 马上发一条，不管总开关
 | `liveStart` / `liveEnd` | 开播（等 `delaySec` 秒后）/ 下播时说一句。 |
 | `breakReminder` | `everyMin` 每几分钟，`text` 里可以用 `{hours}` / `{minutes}`。 |
 | `songAsk` | 用 `data/songs.txt`（一行一首）回答「唱过 X 吗」。`yes` / `no` 模板里可以用 `{song}`。 |
+| `ai` | `enabled` 总开关；`timed` / `breakReminder` 换说法；`confirm` 要不要等确认、`confirmSec` 等几秒；`persona` 用不用人设；`recentDm` 给 AI 看几条最近弹幕；`extra` 额外要求；`chat`（`enabled`、`everyMin` 几分钟最多看一次、`minNew` 至少几条新弹幕、`onlyMention` + `names` 只在叫到这些名字时插话、`maxPerStream` 每场上限）。 |
 
 任何文字都可以用 `||` 隔开写几种说法。B 站收下但把消息藏起来（有屏蔽词）时，会发下一种说法。
 
 `config.json`：`room`（必填）、`dataDir`、`loginFile`、`senderLoginFile`、`songsFile`，以及 `discordWebhook`：一直发不出去时发 Discord 提醒。
+
+### AI（可选）
+
+用 DeepSeek（或任何兼容 OpenAI 格式的接口）。在 `config.json` 里填 `deepseekKey`（或者设环境变量 `DEEPSEEK_API_KEY`），可选 `aiModel`（默认 `deepseek-flash`）、`aiBaseUrl`、`personaFile`（人设文本文件，`#` 开头的行不算）、`streamer`（主播怎么称呼）、`confirmPort`（确认页面端口，默认 18790，`0` 关掉）。然后在 `settings.json` 里打开 `ai.enabled`。
+
+运行时打开 `http://127.0.0.1:18790/`，AI 写好的弹幕会出现在这里，可以改字、发送、换一条或不用。`node index.mjs ai-try` / `node index.mjs ai-try chat` 只试写不发。AI 写的弹幕超字数或带链接、群号这类词会被丢掉，改发原句。密钥别提交到 git（`config.json` 已在 `.gitignore` 里）。
 
 运行状态写在 `data/status.json`（最近发出的消息、错误、队列长度）。
 
@@ -87,6 +95,7 @@ Automatic danmaku for a **Bilibili Live** room. It listens to the room and sends
 - **Keyword replies** that only answer questions ("群号是多少？" yes, "明天再进群聊" no; prefix a keyword with `=` to always answer)
 - **"Have you sung X?"** answers from your own song list
 - **Stream start / end** messages and **break reminders** ("you've been live for 2 hours")
+- **Optional AI** (off by default): rephrase timed messages and break reminders each time, or let the AI read chat and decide whether to chime in. Drafts wait on a small local page for you to press send; if you don't, a rephrase falls back to the original line and a chime-in is dropped
 - Safe by default: one shared queue, a minimum gap between messages, a per-stream cap, auto-pause on errors, automatic splitting of long text, and `text A || text B` alternatives that are tried when Bilibili silently swallows a message
 
 ## Requirements
@@ -127,10 +136,17 @@ node index.mjs test 大家好        # send one message right away, ignoring the
 | `liveStart` / `liveEnd` | One message when the stream starts (after `delaySec`) / ends. |
 | `breakReminder` | `everyMin`, `text` with `{hours}` / `{minutes}`. |
 | `songAsk` | Answers "唱过 X 吗" using `data/songs.txt` (one song per line). `yes` / `no` templates use `{song}`. |
+| `ai` | `enabled` master switch; `timed` / `breakReminder` rephrase; `confirm` wait for approval, `confirmSec` how long; `persona` use the persona file; `recentDm` how many recent messages the AI sees; `extra` extra instructions; `chat` (`enabled`, `everyMin` at most once per N minutes, `minNew` new messages needed, `onlyMention` + `names` only when chat calls one of these names, `maxPerStream` per-stream cap). |
 
 Any text can list alternatives separated by `||`. If Bilibili accepts a message but hides it (filtered words), the next alternative is sent.
 
 `config.json`: `room` (required), `dataDir`, `loginFile`, `senderLoginFile`, `songsFile`, and `discordWebhook` for an alert when sending keeps failing.
+
+### AI (optional)
+
+Uses DeepSeek (or any OpenAI-compatible endpoint). Put `deepseekKey` in `config.json` (or set `DEEPSEEK_API_KEY`); optional `aiModel` (default `deepseek-flash`), `aiBaseUrl`, `personaFile` (plain-text persona, lines starting with `#` are skipped), `streamer` (how to refer to the streamer) and `confirmPort` (approval page port, default 18790, `0` turns it off). Then turn on `ai.enabled` in `settings.json`.
+
+While running, open `http://127.0.0.1:18790/`: AI drafts show up there and you can edit, send, redo or skip them. `node index.mjs ai-try` / `node index.mjs ai-try chat` draft one without sending. Drafts that are too long or contain links or group-number words are dropped in favour of the original line. Never commit your key (`config.json` is already in `.gitignore`).
 
 The runtime state is written to `data/status.json` (last sent messages, errors, queue length).
 

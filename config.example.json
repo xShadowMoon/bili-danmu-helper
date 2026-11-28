@@ -1,5 +1,9 @@
 {
   "room": 0,
   "dataDir": "data",
-  "discordWebhook": ""
+  "discordWebhook": "",
+  "deepseekKey": "",
+  "personaFile": "",
+  "streamer": "主播",
+  "confirmPort": 18790
 }
